@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<ruleset name="Oxford Course Discovery">
+	<description>WordPress coding standards, adjusted for a typed, namespaced codebase.</description>
+
+	<file>src</file>
+	<file>tests</file>
+	<file>templates</file>
+	<file>oxford-course-discovery.php</file>
+
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="colors"/>
+	<arg value="sp"/>
+	<arg name="parallel" value="8"/>
+
+	<config name="minimum_wp_version" value="6.4"/>
+	<config name="testVersion" value="8.2-"/>
+
+	<rule ref="WordPress">
+		<!--
+		  This codebase is PSR-4 autoloaded, so file names follow the class
+		  name rather than WordPress' class-*.php convention.
+		-->
+		<exclude name="WordPress.Files.FileName"/>
+
+		<!--
+		  Local variables and properties are camelCase. WordPress' snake_case
+		  rule is aimed at procedural code; inside typed classes, matching the
+		  PSR-12 convention of the wider PHP ecosystem is more useful. Hook
+		  callbacks that receive WordPress' own snake_case arguments keep those
+		  names.
+		-->
+		<exclude name="WordPress.NamingConventions.ValidVariableName.VariableNotSnakeCase"/>
+		<exclude name="WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase"/>
+		<exclude name="WordPress.NamingConventions.ValidVariableName.PropertyNotSnakeCase"/>
+
+		<!--
+		  Generic types in docblocks (`list<int>`, `array<string, mixed>`) are
+		  what PHPStan reads; the sniff only understands plain `array`.
+		-->
+		<exclude name="Squiz.Commenting.FunctionComment.IncorrectTypeHint"/>
+
+		<!--
+		  Hooks are namespaced with slashes (`oxcd/filters/register`) so the
+		  extension surface reads as a hierarchy. This is a deliberate,
+		  documented convention — see src/Support/Hooks.php.
+		-->
+		<exclude name="WordPress.NamingConventions.ValidHookName.UseUnderscores"/>
+
+		<!--
+		  Capability interfaces are implemented in full even where a particular
+		  implementation ignores an argument; the parameter is part of the
+		  contract, not dead code.
+		-->
+		<exclude name="Generic.CodeAnalysis.UnusedFunctionParameter"/>
+
+		<!-- Exception messages are developer-facing and never rendered. -->
+		<exclude name="WordPress.Security.EscapeOutput.ExceptionNotEscaped"/>
+
+		<!--
+		  meta_query is used only by MetaConstraint, which exists so third
+		  party filters have that option; the built-in filters deliberately do
+		  not. tax_query is used for categories, where term relationships are
+		  already indexed. Both are reasoned about in docs/PERFORMANCE.md.
+		-->
+		<exclude name="WordPress.DB.SlowDBQuery.slow_db_query_meta_query"/>
+		<exclude name="WordPress.DB.SlowDBQuery.slow_db_query_tax_query"/>
+
+		<!--
+		  The sniff cannot follow @param tags across PHP 8 promoted constructor
+		  properties and reports every one of them as a name mismatch.
+		-->
+		<exclude name="Squiz.Commenting.FunctionComment.ParamNameNoMatch"/>
+
+		<!--
+		  Every file is namespaced; the namespace is the prefix. Requiring an
+		  additional string prefix on classes and constants would be noise.
+		-->
+		<exclude name="WordPress.NamingConventions.PrefixAllGlobals"/>
+
+		<!--
+		  Tests are named test_it_does_something for readability in test output.
+		-->
+		<exclude name="WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid"/>
+
+		<!-- Documented per file where relevant; not a blanket requirement. -->
+		<exclude name="Squiz.Commenting.FileComment"/>
+		<exclude name="Squiz.Commenting.ClassComment.SpacingAfter"/>
+
+		<!-- Native types make many @param/@return tags redundant. -->
+		<exclude name="Squiz.Commenting.FunctionComment.Missing"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingParamComment"/>
+		<exclude name="Squiz.Commenting.FunctionComment.MissingParamTag"/>
+		<exclude name="Squiz.Commenting.VariableComment.Missing"/>
+		<exclude name="Generic.Commenting.DocComment.MissingShort"/>
+	</rule>
+
+	<!-- Templates are markup with control flow; the class-per-file rule does not apply. -->
+	<rule ref="Squiz.Commenting.FileComment">
+		<exclude-pattern>templates/*</exclude-pattern>
+	</rule>
+</ruleset>

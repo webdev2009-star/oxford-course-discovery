@@ -1,0 +1,20 @@
+# Dependencies
+/plugin/oxford-course-discovery/vendor/
+/e2e/node_modules/
+
+# Test output
+/e2e/test-results/
+/e2e/playwright-report/
+/plugin/oxford-course-discovery/.phpunit.result.cache
+/plugin/oxford-course-discovery/coverage/
+
+# Local configuration
+.env
+
+# Editors, tooling and OS
+.idea/
+.vscode/
+.claude/
+*.swp
+.DS_Store
+Thumbs.db

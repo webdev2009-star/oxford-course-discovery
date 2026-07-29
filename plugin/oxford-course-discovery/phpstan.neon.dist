@@ -1,0 +1,16 @@
+includes:
+    - vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+    excludePaths:
+        - vendor
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # WP-CLI and ACF are optional dependencies, guarded at every call site
+        # (`defined( 'WP_CLI' )`, `function_exists( 'acf_add_local_field_group' )`)
+        # and deliberately not required, so no stubs are installed for them.
+        - '#unknown class WP_CLI#'
+        - '#Function acf_[a-z_]+ not found#'

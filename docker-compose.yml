@@ -1,0 +1,66 @@
+name: oxford-course-discovery
+
+services:
+  db:
+    image: mariadb:11.4
+    command: --max_allowed_packet=64M
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: ${DB_NAME:-wordpress}
+      MARIADB_USER: ${DB_USER:-wordpress}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-wordpress}
+    volumes:
+      - db-data:/var/lib/mysql
+      # A second database for the WordPress test suite, which truncates
+      # aggressively and must never share storage with the dev site.
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  wordpress:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${DB_NAME:-wordpress}
+      WORDPRESS_DB_USER: ${DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:-wordpress}
+      WORDPRESS_DEBUG: ${WORDPRESS_DEBUG:-1}
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_DEBUG_LOG', true );
+        define( 'WP_DEBUG_DISPLAY', false );
+        define( 'SCRIPT_DEBUG', true );
+        define( 'WP_HOME', '${SITE_URL:-http://localhost:8080}' );
+        define( 'WP_SITEURL', '${SITE_URL:-http://localhost:8080}' );
+      # Consumed by bin/setup.sh
+      SITE_URL: ${SITE_URL:-http://localhost:8080}
+      SITE_TITLE: ${SITE_TITLE:-Oxford Course Discovery}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-password}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      SEED_COURSES: ${SEED_COURSES:-48}
+      WP_TESTS_DIR: /var/www/wordpress-tests-lib
+      WP_CORE_DIR: /var/www/wordpress-develop
+    ports:
+      - "${SITE_PORT:-8080}:80"
+    volumes:
+      - wp-data:/var/www/html
+      - test-lib:/var/www/wordpress-tests-lib
+      # The plugin is bind mounted, so edits on the host are live in the
+      # container without a rebuild.
+      - ./plugin/oxford-course-discovery:/var/www/html/wp-content/plugins/oxford-course-discovery
+      - ./bin:/usr/local/bin/oxcd:ro
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  wp-data:
+  test-lib:

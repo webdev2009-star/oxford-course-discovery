@@ -1,0 +1,16 @@
+# Normalise line endings so a Windows checkout does not produce a diff on every
+# file, and so the shell scripts stay executable inside the Linux container.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.woff binary
+*.woff2 binary
+
+# Not needed in a distributed archive.
+/e2e            export-ignore
+/docs           export-ignore
+/.github        export-ignore
+.gitattributes  export-ignore
+.gitignore      export-ignore
