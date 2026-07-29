@@ -1,0 +1,28 @@
+# Automatic HTTPS in front of the WordPress container.
+#
+# Caddy obtains and renews a Let's Encrypt certificate for $DOMAIN, redirects
+# HTTP to HTTPS, and passes the real client protocol and IP upstream — which is
+# what the entrypoint's X-Forwarded-Proto handling depends on.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy app:80 {
+		header_up X-Forwarded-Proto https
+		header_up X-Real-IP {remote_host}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

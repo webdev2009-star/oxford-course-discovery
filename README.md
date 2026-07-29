@@ -25,11 +25,30 @@ Advanced Custom Fields.
 
 ## Quick start
 
+Docker is the only requirement.
+
+**macOS / Linux** (needs `make`):
+
 ```bash
-git clone <repository-url> oxford-course-discovery
-cd oxford-course-discovery
+git clone https://github.com/webdev2009-star/course-discovery.git
+cd course-discovery
 cp .env.example .env      # optional; every value has a working default
 make setup                # build, start, install WordPress, seed 48 courses
+```
+
+**Windows** (PowerShell — `make` is usually not installed):
+
+```powershell
+git clone https://github.com/webdev2009-star/course-discovery.git
+cd course-discovery
+.\bin\dev.ps1 setup
+```
+
+**Any platform, no wrapper** — this is all either script does:
+
+```bash
+docker compose up -d --build
+docker compose exec wordpress bash /usr/local/bin/oxcd/setup.sh
 ```
 
 Then open:
@@ -40,11 +59,19 @@ Then open:
 | Admin | <http://localhost:8080/wp-admin> (`admin` / `password`) |
 | REST API | <http://localhost:8080/wp-json/oxcd/v1/courses> |
 
-`make setup` is idempotent — re-run it any time. Without `make`:
+Setup is idempotent — re-run it any time.
+
+### Deploying it
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The production image provisions
+itself on first boot — install, migrations, seed — and every step is a no-op
+afterwards, so a redeploy needs no manual follow-up.
 
 ```bash
-docker compose up -d --build
-docker compose exec wordpress bash /usr/local/bin/oxcd/setup.sh
+# Railway: railway.json is already in the repo; add a MySQL service and deploy.
+# Any Docker host:
+cp .env.production.example .env
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ### Installing into an existing WordPress site
@@ -110,7 +137,8 @@ All four are derived data: dropping and rebuilding them loses nothing.
 
 ## Development commands
 
-`make help` lists everything. The common ones:
+`make help` lists everything. On Windows use `.\bin\dev.ps1 <command>`, which
+mirrors every target below. The common ones:
 
 | Command | Description |
 |---|---|
@@ -427,6 +455,7 @@ Decisions taken where the brief left room, and why.
 
 | Document | Contents |
 |---|---|
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Railway and Docker host deployment, environment variables, operations |
 | [docs/TESTING.md](docs/TESTING.md) | Test strategy, high-risk areas, regression prevention, how to test a new filter |
 | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Bottlenecks, meta query limits, indexing, caching, pagination, and the path to millions of courses |
 
@@ -437,8 +466,10 @@ Decisions taken where the brief left room, and why.
 ```
 .
 ├── docker-compose.yml            Development stack (WordPress, MariaDB)
-├── docker/                       Image and database bootstrap
-├── bin/                          setup, test and WP test library scripts
+├── docker-compose.prod.yml       Production stack, with optional HTTPS via Caddy
+├── railway.json                  Railway build and deploy configuration
+├── docker/                       Development and production images
+├── bin/                          setup, test and developer scripts (sh + PowerShell)
 ├── Makefile                      Developer entry points
 ├── docs/                         Testing and performance documentation
 ├── e2e/                          Playwright suite

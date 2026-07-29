@@ -1,0 +1,23 @@
+# Keep the build context small and the image free of development artefacts.
+
+.git
+.gitattributes
+.gitignore
+.claude
+
+# Installed inside the image by Composer, never copied from the host.
+plugin/oxford-course-discovery/vendor
+plugin/oxford-course-discovery/.phpunit.result.cache
+
+# Development and test tooling.
+e2e
+docs
+docker-compose.yml
+Makefile
+bin/install-wp-tests.sh
+bin/test.sh
+.env
+.env.example
+
+*.md
+!plugin/oxford-course-discovery/readme.txt

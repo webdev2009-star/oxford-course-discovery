@@ -1,0 +1,116 @@
+name: course-discovery-prod
+
+# Production stack for a single host (VPS, or anywhere with Docker).
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Serves on port 80 by default. For HTTPS on a real domain, set DOMAIN and
+# ACME_EMAIL in .env and add the tls profile:
+#
+#   docker compose -f docker-compose.prod.yml --profile tls up -d --build
+#
+# Caddy then obtains and renews a Let's Encrypt certificate automatically.
+
+services:
+  db:
+    image: mariadb:11.4
+    command: >-
+      --max_allowed_packet=64M
+      --innodb-buffer-pool-size=256M
+      --innodb-ft-min-token-size=3
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      MARIADB_DATABASE: ${DB_NAME:-wordpress}
+      MARIADB_USER: ${DB_USER:-wordpress}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    # Not published: only the app container needs to reach it.
+    expose:
+      - "3306"
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/production/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: ${DB_NAME:-wordpress}
+      WORDPRESS_DB_USER: ${DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+
+      SITE_URL: ${SITE_URL:?set SITE_URL in .env, e.g. https://courses.example.com}
+      SITE_TITLE: ${SITE_TITLE:-Course Discovery}
+
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+
+      SEED_COURSES: ${SEED_COURSES:-48}
+      SKIP_SEED: ${SKIP_SEED:-0}
+      INSTALL_ACF: ${INSTALL_ACF:-1}
+      DISCOURAGE_SEARCH_ENGINES: ${DISCOURAGE_SEARCH_ENGINES:-1}
+
+      # Set these so logins survive a redeploy. Generate at
+      # https://api.wordpress.org/secret-key/1.1/salt/
+      AUTH_KEY: ${AUTH_KEY:-}
+      SECURE_AUTH_KEY: ${SECURE_AUTH_KEY:-}
+      LOGGED_IN_KEY: ${LOGGED_IN_KEY:-}
+      NONCE_KEY: ${NONCE_KEY:-}
+      AUTH_SALT: ${AUTH_SALT:-}
+      SECURE_AUTH_SALT: ${SECURE_AUTH_SALT:-}
+      LOGGED_IN_SALT: ${LOGGED_IN_SALT:-}
+      NONCE_SALT: ${NONCE_SALT:-}
+    volumes:
+      # Uploads are the only user data on disk; core and the plugin come from
+      # the image and are replaced on every deploy.
+      - uploads:/var/www/html/wp-content/uploads
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/wp-json/oxcd/v1/courses?per_page=1 >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["tls"]
+    depends_on:
+      - app
+    environment:
+      # Defaults rather than required values: compose interpolates every service
+      # even when its profile is inactive, so `:?` here would break the plain
+      # HTTP path. Set both in .env before enabling the tls profile — with
+      # DOMAIN unset, Caddy issues an untrusted local certificate instead.
+      DOMAIN: ${DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./docker/production/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      # Caddy owns 80 (it needs it for the ACME challenge and the HTTP->HTTPS
+      # redirect), so set HTTP_PORT=8080 in .env when using this profile to move
+      # the app container's published port out of the way.
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  uploads:
+  caddy-data:
+  caddy-config:
