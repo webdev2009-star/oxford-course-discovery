@@ -41,14 +41,59 @@ Or in the dashboard: **New Project → Deploy from GitHub repo →
 
 ### 2. Add MySQL
 
-**New → Database → Add MySQL**, in the same project.
-
-Railway exposes `MYSQLHOST`, `MYSQLPORT`, `MYSQLUSER`, `MYSQLPASSWORD` and
-`MYSQLDATABASE` to the other services in the project. The entrypoint reads them
-directly — there is nothing to wire up.
+**New → Database → Add MySQL**, **in the same project as the app service**.
 
 > MySQL, not Postgres. WordPress requires MySQL or MariaDB, and this plugin's
 > search index uses a `FULLTEXT` key.
+
+Then reference it from the **app** service's variables — Railway does not share
+variables between services automatically:
+
+| Variable | Value |
+|---|---|
+| `MYSQLHOST` | `${{MySQL.MYSQLHOST}}` |
+| `MYSQLPORT` | `${{MySQL.MYSQLPORT}}` |
+| `MYSQLUSER` | `${{MySQL.MYSQLUSER}}` |
+| `MYSQLPASSWORD` | `${{MySQL.MYSQLPASSWORD}}` |
+| `MYSQLDATABASE` | `${{MySQL.MYSQLDATABASE}}` |
+
+Or the same thing in one variable: `MYSQL_URL` = `${{MySQL.MYSQL_URL}}`. The
+entrypoint parses either. Prefer the five if the generated password might
+contain an `@`, which would break URL parsing.
+
+Or from the CLI:
+
+```bash
+railway variables --service <app> --set 'MYSQLHOST=${{MySQL.MYSQLHOST}}'
+# …and the other four
+```
+
+#### Two traps worth knowing
+
+**References only resolve inside one project.** If the database and the app are
+in *different* Railway projects, `${{MySQL.MYSQLHOST}}` resolves to an **empty
+string** — not an error, and not the literal text. The app then starts with no
+database and restart-loops on:
+
+```
+No database configured. Set WORDPRESS_DB_HOST, or attach a MySQL service.
+```
+
+Since a failing container never serves a page, this presents as a *health check*
+failure, which sends you looking in the wrong place entirely. Check the values
+first:
+
+```bash
+railway variables --service <app> --json | grep MYSQL
+```
+
+Empty values mean the reference is not bound. Adding a database to the right
+project is not enough on its own — a reference created while the target did not
+exist stays unbound, so re-set the variables afterwards.
+
+**A mistyped service name behaves differently.** Then Railway passes the literal
+`${{MySQL.MYSQLHOST}}` through, and the entrypoint stops immediately naming the
+variable rather than timing out against a nonsense host.
 
 ### 3. Set the variables
 
