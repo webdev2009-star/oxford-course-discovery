@@ -33,7 +33,33 @@ wp_cli() { wp --path="${WP_PATH}" --allow-root "$@"; }
 # Railway's MySQL service exposes MYSQL* variables; plain Docker uses
 # WORDPRESS_DB_*. Accept either, and let an explicit WORDPRESS_DB_* win.
 
+# Railway substitutes `${{Service.VAR}}` references only when the service name
+# matches exactly. When it does not, the *literal* text is passed through as the
+# value — so a typo produces a database host of `${{MySQL.MYSQL_URL}}`, two
+# minutes of failed connection attempts, and an error about the database being
+# unreachable. Catching it here turns that into an immediate, accurate message.
+assert_resolved() {
+	local name value
+
+	for name in "$@"; do
+		value="${!name:-}"
+
+		case "${value}" in
+			*'${{'* | *'}}'*)
+				die "${name} contains an unresolved Railway reference: ${value}
+    Railway only substitutes \${{Service.VAR}} when the service name matches exactly.
+    Check the name in the Railway sidebar (it is case sensitive), or type \${{ in the
+    variable editor and pick from the suggestions rather than typing it by hand."
+				;;
+		esac
+	done
+}
+
 resolve_database() {
+	assert_resolved MYSQL_URL MYSQLHOST MYSQLPORT MYSQLUSER MYSQLPASSWORD \
+		MYSQLDATABASE WORDPRESS_DB_HOST WORDPRESS_DB_NAME WORDPRESS_DB_USER \
+		WORDPRESS_DB_PASSWORD SITE_URL ADMIN_PASSWORD
+
 	if [ -n "${MYSQL_URL:-}" ] && [ -z "${WORDPRESS_DB_HOST:-}" ]; then
 		# mysql://user:password@host:port/database
 		local url="${MYSQL_URL#mysql://}"
