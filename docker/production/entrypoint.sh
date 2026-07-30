@@ -170,7 +170,19 @@ configure_apache() {
 	echo "Listen ${port}" > /etc/apache2/ports.conf
 	sed -ri "s!<VirtualHost \*:[0-9]+>!<VirtualHost *:${port}>!" /etc/apache2/sites-available/000-default.conf
 
-	log "Apache listening on ${port}"
+	# Apache exits rather than degrades when more than one MPM is loaded, and
+	# the error names none of them. Report what is actually enabled, and fail
+	# here — where the message is ours — rather than after provisioning.
+	local mpms
+	mpms="$( find /etc/apache2/mods-enabled -name 'mpm_*.load' -printf '%f ' 2>/dev/null || true )"
+
+	case "$( printf '%s' "${mpms}" | wc -w )" in
+		1) ;;
+		0) die "No Apache MPM is enabled." ;;
+		*) die "More than one Apache MPM is enabled (${mpms%% }); mod_php requires mpm_prefork alone." ;;
+	esac
+
+	log "Apache listening on ${port} (${mpms%% })"
 }
 
 # --- WordPress core ----------------------------------------------------------
@@ -349,11 +361,16 @@ provision_content() {
 	local courses
 	courses="$(wp_cli post list --post_type=course --format=count 2>/dev/null || echo 0)"
 
-	if [ "${courses}" -eq 0 ] && [ "${SKIP_SEED:-0}" != "1" ]; then
+	# Report the actual reason. "Content already present (0 courses)" is a
+	# contradiction that costs someone an hour working out which condition
+	# really fired.
+	if [ "${SKIP_SEED:-0}" = "1" ]; then
+		log "SKIP_SEED is set; leaving the catalogue as it is (${courses} courses)"
+	elif [ "${courses}" -gt 0 ]; then
+		log "Catalogue already has ${courses} courses; skipping seed"
+	else
 		log "Seeding ${SEED_COURSES:-48} demo courses"
 		wp_cli oxcd seed --courses="${SEED_COURSES:-48}"
-	else
-		log "Content already present (${courses} courses); skipping seed"
 	fi
 
 	wp_cli rewrite structure '/%postname%/' >/dev/null

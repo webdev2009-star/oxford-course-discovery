@@ -69,6 +69,18 @@ RUN { \
 # finder feel fast on a small instance.
 RUN a2enmod deflate expires headers rewrite remoteip
 
+# Pin the MPM explicitly.
+#
+# mod_php only works under prefork, and Apache refuses to start at all if a
+# second MPM is loaded ("AH00534: More than one MPM loaded"), which is a crash
+# loop rather than a degraded mode. The base image enables prefork alone today,
+# but nothing stops an apt upgrade in the layer above from enabling event as
+# well — so state the requirement instead of inheriting it.
+RUN set -eux; \
+    a2dismod mpm_event mpm_worker 2>/dev/null || true; \
+    a2enmod mpm_prefork; \
+    ls /etc/apache2/mods-enabled/ | grep -c 'mpm_.*\.load' | grep -qx 1
+
 COPY docker/production/apache-oxcd.conf /etc/apache2/conf-available/oxcd.conf
 RUN a2enconf oxcd
 
