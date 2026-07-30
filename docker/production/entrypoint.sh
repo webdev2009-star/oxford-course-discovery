@@ -124,14 +124,28 @@ ensure_core_files() {
 	chown -R www-data:www-data "${WP_PATH}/wp-content"
 }
 
-# The eight salts. Set them as platform variables and logins survive a
-# redeploy; leave them unset and each deploy generates its own, which logs
-# everyone out. Cheap to set, so it is worth documenting rather than hiding.
+SALT_KEYS=(
+	AUTH_KEY SECURE_AUTH_KEY LOGGED_IN_KEY NONCE_KEY
+	AUTH_SALT SECURE_AUTH_SALT LOGGED_IN_SALT NONCE_SALT
+)
+
+# Names of the salts that are not set.
+missing_salts() {
+	local key
+	for key in "${SALT_KEYS[@]}"; do
+		[ -z "${!key:-}" ] && printf '%s ' "${key}"
+	done
+}
+
+# All eight salts, or none.
+#
+# A partial set is no better than none: the missing ones would be regenerated on
+# every deploy, which invalidates sessions anyway. So the check is all-or-nothing
+# and {@see ensure_config} reports exactly which names are absent — a half-set
+# that is silently ignored is the kind of thing nobody discovers for weeks.
 salts_provided() {
 	local key
-	for key in AUTH_KEY SECURE_AUTH_KEY LOGGED_IN_KEY NONCE_KEY \
-		AUTH_SALT SECURE_AUTH_SALT LOGGED_IN_SALT NONCE_SALT
-	do
+	for key in "${SALT_KEYS[@]}"; do
 		[ -z "${!key:-}" ] && return 1
 	done
 
@@ -192,8 +206,11 @@ ensure_config() {
 		salt_flag+=( --skip-salts )
 		log "Using salts from the environment"
 	else
-		warn "No salt variables set; this deploy generates its own, so existing logins will be invalidated."
-		warn "Set AUTH_KEY, SECURE_AUTH_KEY, LOGGED_IN_KEY, NONCE_KEY, AUTH_SALT, SECURE_AUTH_SALT, LOGGED_IN_SALT and NONCE_SALT to avoid that."
+		local absent
+		absent="$(missing_salts)"
+
+		warn "Generating salts: this deploy will invalidate any existing logins."
+		warn "All eight are needed before any are used. Still to set: ${absent% }"
 	fi
 
 	extra_php | wp_cli config create \
