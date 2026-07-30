@@ -77,11 +77,13 @@ services:
     ports:
       - "${HTTP_PORT:-80}:80"
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost/wp-json/oxcd/v1/courses?per_page=1 >/dev/null || exit 1"]
+      # Same endpoint the platform probes use: cheap, and it fails when the
+      # database goes away rather than only when PHP stops responding.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:80/healthcheck.php >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 120s
+      start_period: 180s
     restart: unless-stopped
 
   caddy:

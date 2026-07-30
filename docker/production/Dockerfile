@@ -79,6 +79,11 @@ COPY --from=vendor /plugin /usr/src/oxcd-plugin
 COPY docker/production/entrypoint.sh /usr/local/bin/oxcd-entrypoint.sh
 RUN chmod +x /usr/local/bin/oxcd-entrypoint.sh
 
+# Health check endpoint. Lives in the web root so platform probes can reach it
+# without loading WordPress; the entrypoint's `cp -a` of core files never
+# removes it, because it copies over the directory rather than replacing it.
+COPY docker/production/healthcheck.php /var/www/html/healthcheck.php
+
 ENV OXCD_PLUGIN_SLUG=oxford-course-discovery \
     WP_PATH=/var/www/html \
     PORT=80

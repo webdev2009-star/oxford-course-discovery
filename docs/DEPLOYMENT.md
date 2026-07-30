@@ -6,13 +6,15 @@ after that, each of those steps is a no-op. A redeploy is therefore safe, and
 there is no manual post-deploy checklist.
 
 Verified locally before writing this: first boot provisions in ~40s, a restart
-re-runs the entrypoint without re-seeding, and the filter API returns correct
-results through the production Apache config.
+re-runs the entrypoint without re-seeding, the filter API returns correct
+results through the production Apache config, and `/healthcheck.php` flips to
+503 when the database is stopped and back to 200 when it returns.
 
 - [Railway](#railway) — recommended for a few weeks
 - [Any Docker host / VPS](#any-docker-host)
 - [Environment variables](#environment-variables)
 - [What the entrypoint does](#what-the-entrypoint-does)
+- [Health checks](#health-checks)
 - [Operations](#operations)
 - [Not Vercel](#not-vercel)
 
@@ -73,6 +75,11 @@ generated hostname should not be canonical.
 
 **Settings → Networking → Generate Domain**, then deploy. Railway sets `$PORT`;
 the entrypoint configures Apache to listen on it.
+
+`railway.json` sets `healthcheckPath` to `/healthcheck.php` with a 600 second
+timeout — first boot has to install WordPress, download ACF and seed the
+catalogue before Apache starts answering, and a shorter timeout would mark a
+perfectly good deploy as failed. See [Health checks](#health-checks).
 
 Watch the deploy log — you should see:
 
@@ -241,6 +248,46 @@ therefore sees `http`, builds `http://` URLs, and — because `WP_SITEURL` is
 `https://` — redirects forever. The generated `wp-config.php` sets
 `$_SERVER['HTTPS']` from `X-Forwarded-Proto`, which is the standard fix and the
 single most common reason a containerised WordPress deploy loops.
+
+---
+
+## Health checks
+
+`GET /healthcheck.php` — used by Railway, by the compose healthcheck, and
+useful by hand.
+
+```console
+$ curl -i https://your-app.up.railway.app/healthcheck.php
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Cache-Control: no-store, no-cache, must-revalidate
+X-Robots-Tag: noindex, nofollow
+
+{"status":"ok","database":"reachable","php":"8.3.28"}
+```
+
+Returns **503** with `"database":"connection failed"` when MySQL is unreachable.
+
+It deliberately does **not** load WordPress:
+
+| | `/` | `/healthcheck.php` |
+|---|---|---|
+| Boots WordPress | Yes | No |
+| Runs the finder query | Yes | No |
+| Response time | ~150ms | ~4ms |
+| Detects a dead database | Only as a 500 | Explicitly, as a 503 |
+| Survives a fatal error in a plugin | No | Yes |
+
+That last row is the point. If a plugin update throws a fatal, `/` returns 500
+and the platform restarts the container in a loop; the health endpoint keeps
+answering, so the container stays up and you can read the logs and fix it.
+
+Because the entrypoint starts Apache only after provisioning succeeds, *any*
+response means install, migrations and seeding finished. The endpoint's ongoing
+job is catching what breaks later — which in practice is the database.
+
+Add `/healthcheck.php` to an external uptime monitor if you want to be told
+before the reviewer notices.
 
 ---
 
