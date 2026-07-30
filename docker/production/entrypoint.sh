@@ -86,26 +86,61 @@ resolve_database() {
 	export WORDPRESS_TABLE_PREFIX="${WORDPRESS_TABLE_PREFIX:-wp_}"
 }
 
+# Probe with the same driver the application uses.
+#
+# The obvious `mysqladmin ping` is the wrong tool: the MariaDB client shipped by
+# Debian refuses MySQL 8+/9's self-signed TLS certificate outright
+# ("TLS/SSL error: self-signed certificate in certificate chain"), while PHP's
+# mysqli connects to the very same server without complaint. A readiness probe
+# that can fail where the application succeeds is worse than no probe at all —
+# it blocks a deployment that would have worked.
+database_reachable() {
+	php -r '
+		mysqli_report( MYSQLI_REPORT_OFF );
+
+		$connection = @mysqli_connect(
+			getenv( "OXCD_PROBE_HOST" ),
+			getenv( "OXCD_PROBE_USER" ),
+			getenv( "OXCD_PROBE_PASSWORD" ),
+			"",
+			(int) getenv( "OXCD_PROBE_PORT" )
+		);
+
+		if ( ! $connection ) {
+			fwrite( STDERR, mysqli_connect_error() );
+			exit( 1 );
+		}
+
+		mysqli_close( $connection );
+		exit( 0 );
+	'
+}
+
 wait_for_database() {
 	local host="${WORDPRESS_DB_HOST%%:*}"
 	local port="${WORDPRESS_DB_HOST##*:}"
 	[ "${port}" = "${host}" ] && port=3306
 
+	export OXCD_PROBE_HOST="${host}"
+	export OXCD_PROBE_PORT="${port}"
+	export OXCD_PROBE_USER="${WORDPRESS_DB_USER}"
+	export OXCD_PROBE_PASSWORD="${WORDPRESS_DB_PASSWORD:-}"
+
 	log "Waiting for MySQL at ${host}:${port}"
 
 	local attempt=1
-	until mysqladmin ping \
-		--host="${host}" \
-		--port="${port}" \
-		--user="${WORDPRESS_DB_USER}" \
-		--password="${WORDPRESS_DB_PASSWORD:-}" \
-		--protocol=tcp \
-		--silent >/dev/null 2>&1
-	do
-		[ "${attempt}" -ge 60 ] && die "Database did not become reachable after 60 attempts."
+	until database_reachable >/dev/null 2>&1; do
+		if [ "${attempt}" -ge 60 ]; then
+			# Surface the driver's own message; "not reachable" alone sends
+			# people looking at networking when it is usually credentials.
+			die "Database did not become reachable after 60 attempts: $( database_reachable 2>&1 >/dev/null || true )"
+		fi
+
 		sleep 2
 		attempt=$((attempt + 1))
 	done
+
+	unset OXCD_PROBE_HOST OXCD_PROBE_PORT OXCD_PROBE_USER OXCD_PROBE_PASSWORD
 
 	log "Database is up"
 }
