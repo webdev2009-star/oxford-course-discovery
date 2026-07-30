@@ -5,10 +5,25 @@ activates the plugin, runs the migrations and seeds demo content. On every boot
 after that, each of those steps is a no-op. A redeploy is therefore safe, and
 there is no manual post-deploy checklist.
 
-Verified locally before writing this: first boot provisions in ~40s, a restart
-re-runs the entrypoint without re-seeding, the filter API returns correct
-results through the production Apache config, and `/healthcheck.php` flips to
-503 when the database is stopped and back to 200 when it returns.
+Running live at
+<https://course-discovery-production.up.railway.app> using exactly this setup.
+
+Verified: first boot provisions in ~40s, a restart re-runs the entrypoint
+without re-seeding, the filter API returns correct results through the
+production Apache config, and `/healthcheck.php` flips to 503 when the database
+is stopped and back to 200 when it returns.
+
+### Things that actually went wrong deploying this
+
+Recorded because none of them announced themselves clearly, and each cost a
+deploy cycle. All four are now either fixed in the image or documented below.
+
+| Symptom | Real cause |
+|---|---|
+| Health check fails, app never serves | Database variables resolved to **empty** — MySQL was in a *different Railway project* |
+| `Database did not become reachable` | The readiness probe used the MariaDB CLI, which rejects MySQL 9's self-signed TLS cert. PHP connects fine |
+| Provisioning succeeds, then a crash loop | Apache exits on `AH00534: More than one MPM loaded` |
+| `Application not found` at the URL after a successful deploy | The generated domain had no target port; Railway had not detected one while the app was crash-looping |
 
 - [Railway](#railway) — recommended for a few weeks
 - [Any Docker host / VPS](#any-docker-host)

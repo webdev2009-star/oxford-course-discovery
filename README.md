@@ -7,6 +7,14 @@ finder that works with or without JavaScript.
 Built for the Oxford International pre-interview task. No plugins beyond
 Advanced Custom Fields.
 
+**Live demo:** <https://course-discovery-production.up.railway.app>
+&nbsp;·&nbsp; [REST API](https://course-discovery-production.up.railway.app/wp-json/oxcd/v1/courses)
+&nbsp;·&nbsp; [health](https://course-discovery-production.up.railway.app/healthcheck.php)
+
+48 seeded courses across 6 providers, 8 locations and 8 categories. Try
+[`?provider[]=de-montfort-university&provider[]=global-pathways-institute&location[]=delhi`](https://course-discovery-production.up.railway.app/?provider%5B%5D=de-montfort-university&provider%5B%5D=global-pathways-institute&location%5B%5D=delhi)
+to see the brief's grouping rule — providers OR'd, then AND'd with location.
+
 ---
 
 ## Contents
