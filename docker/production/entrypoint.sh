@@ -164,25 +164,50 @@ resolve_site_url() {
 
 # --- Apache ------------------------------------------------------------------
 
+# Guarantee exactly one MPM, and that it is prefork.
+#
+# Apache exits outright when two are loaded ("AH00534: More than one MPM
+# loaded"), naming neither, so the container crash-loops after a successful
+# provision. mod_php requires prefork specifically.
+#
+# The image is built with prefork alone and asserts it, yet Railway's runtime
+# has been observed with mpm_event enabled alongside it — something between the
+# built image and the running container re-enables it, and the build log gives
+# no clue which. Rather than leave a deployment broken on an unexplained
+# difference, the entrypoint corrects it: it already owns Apache's ports and
+# vhost, so owning the MPM selection is consistent. The correction is logged, so
+# the anomaly stays visible instead of being silently papered over.
+enforce_single_mpm() {
+	local enabled
+	enabled="$( ls /etc/apache2/mods-enabled/ 2>/dev/null | grep -E '^mpm_.*\.load$' | tr '\n' ' ' )"
+
+	if [ "$( printf '%s' "${enabled}" | wc -w )" -ne 1 ] || [ "${enabled% }" != 'mpm_prefork.load' ]; then
+		warn "Correcting Apache MPMs: found '${enabled% }', forcing mpm_prefork"
+
+		a2dismod mpm_event mpm_worker >/dev/null 2>&1 || true
+		a2enmod mpm_prefork >/dev/null 2>&1 || true
+
+		enabled="$( ls /etc/apache2/mods-enabled/ 2>/dev/null | grep -E '^mpm_.*\.load$' | tr '\n' ' ' )"
+	fi
+
+	case "$( printf '%s' "${enabled}" | wc -w )" in
+		1) MPM_IN_USE="${enabled% }" ;;
+		0) die "No Apache MPM is enabled and mpm_prefork could not be enabled." ;;
+		*) die "Could not reduce Apache to a single MPM; still enabled: ${enabled% }" ;;
+	esac
+
+	export MPM_IN_USE
+}
+
 configure_apache() {
 	local port="${PORT:-80}"
 
 	echo "Listen ${port}" > /etc/apache2/ports.conf
 	sed -ri "s!<VirtualHost \*:[0-9]+>!<VirtualHost *:${port}>!" /etc/apache2/sites-available/000-default.conf
 
-	# Apache exits rather than degrades when more than one MPM is loaded, and
-	# the error names none of them. Report what is actually enabled, and fail
-	# here — where the message is ours — rather than after provisioning.
-	local mpms
-	mpms="$( find /etc/apache2/mods-enabled -name 'mpm_*.load' -printf '%f ' 2>/dev/null || true )"
+	enforce_single_mpm
 
-	case "$( printf '%s' "${mpms}" | wc -w )" in
-		1) ;;
-		0) die "No Apache MPM is enabled." ;;
-		*) die "More than one Apache MPM is enabled (${mpms%% }); mod_php requires mpm_prefork alone." ;;
-	esac
-
-	log "Apache listening on ${port} (${mpms%% })"
+	log "Apache listening on ${port} (${MPM_IN_USE})"
 }
 
 # --- WordPress core ----------------------------------------------------------
